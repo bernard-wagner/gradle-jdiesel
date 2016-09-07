@@ -2,12 +2,12 @@ apply plugin: 'com.android.library'
 
 
 android {
-    compileSdkVersion 23
-    buildToolsVersion "23.0.3"
+    compileSdkVersion 16
+    buildToolsVersion "24.0.2"
 
     defaultConfig {
         minSdkVersion 7
-        targetSdkVersion 23
+        targetSdkVersion 24
         versionCode 1
         versionName "1.0"
     }
@@ -15,19 +15,63 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
         }
     }
+
     sourceSets {
         main.java.srcDirs += 'src/generated'
     }
+
+    sourceSets.main.jni.srcDirs = []
+
+    sourceSets.main.jniLibs.srcDir 'src/main/libs'
+
+    // call regular ndk-build(.cmd) script from app directory
+    task ndkBuild(type: Exec) {
+        workingDir file('src/main')
+        commandLine getNdkBuildCmd()
+    }
+
+    tasks.withType(JavaCompile) {
+        compileTask -> compileTask.dependsOn ndkBuild
+    }
+
+    task cleanNative(type: Exec) {
+        workingDir file('src/main')
+        commandLine getNdkBuildCmd(), 'clean'
+    }
+
+    clean.dependsOn cleanNative
 
 }
 
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
-    compile 'com.android.support:appcompat-v7:23.4.0'
-    compile 'com.android.support:support-v4:23.0.3'
     compile 'com.google.protobuf:protobuf-java:3.0.0-beta-3'
     compile project(path: ':mwr-tls')
+}
+
+
+
+def getNdkDir() {
+    if (System.env.ANDROID_NDK_ROOT != null)
+        return System.env.ANDROID_NDK_ROOT
+
+    Properties properties = new Properties()
+    properties.load(project.rootProject.file('local.properties').newDataInputStream())
+    def ndkdir = properties.getProperty('ndk.dir', null)
+    if (ndkdir == null)
+      ndkdir = System.getenv('ANDROID_NDK_HOME')
+
+    if (ndkdir == null)
+        throw new GradleException("NDK location not found. Define location with ndk.dir in the local.properties file or with an ANDROID_NDK_ROOT environment variable.")
+
+    return ndkdir
+}
+
+def getNdkBuildCmd() {
+    def ndkbuild = getNdkDir() + "/ndk-build"
+    return ndkbuild
 }
